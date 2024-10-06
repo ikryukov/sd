@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'sd'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=sd",
+                    "--package=sd"
+                ],
+                "filter": {
+                    "name": "sd",
+                    "kind": "bin"
+                }
+            },
+            "args": ["model_index.json", "sd_xl_base_1.0.safetensors"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'sd'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=sd",
+                    "--package=sd"
+                ],
+                "filter": {
+                    "name": "sd",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
