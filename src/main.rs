@@ -2,12 +2,15 @@ use std::fs::File;
 
 use anyhow::Result;
 use clap::Parser;
+use layers::{conv::Conv2d, layer::Layer};
 use memmap2::MmapOptions;
 use safetensors::SafeTensors;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use tracing::info;
 
 mod cmd;
+mod layers;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelIndex {
@@ -50,28 +53,32 @@ fn main() -> Result<()> {
 
     let args = cmd::Args::try_parse()?;
 
-    let contents = fs::read_to_string(args.model).expect("Couldn't find or load that file.");
+    let test_conv = Conv2d::new(3, 3, 3, 3, 1, 1, 0);
+    info!("{:?}", test_conv);
+    test_conv.forward();
 
-    let model_index: ModelIndex = serde_json::from_str(contents.as_str()).unwrap();
+    // let contents = fs::read_to_string(args.model).expect("Couldn't find or load that file.");
 
-    println!("{:?}", model_index);
+    // let model_index: ModelIndex = serde_json::from_str(contents.as_str()).unwrap();
 
-    let file = File::open(args.weights).unwrap();
-    let buffer = unsafe { MmapOptions::new().map(&file).unwrap() };
-    let tensors = match SafeTensors::deserialize(&buffer) {
-        Ok(t) => t,
-        Err(e) => {
-            println!("{:?}", e);
-            return Err(e.into());
-        }
-    };
-    for (tensor_name, tensor_view) in tensors.tensors() {
-        println!(
-            "{} \t\t {:?} \t {:?}",
-            tensor_name,
-            tensor_view.shape(),
-            tensor_view.dtype()
-        );
-    }
+    // println!("{:?}", model_index);
+
+    // let file = File::open(args.weights).unwrap();
+    // let buffer = unsafe { MmapOptions::new().map(&file).unwrap() };
+    // let tensors = match SafeTensors::deserialize(&buffer) {
+    //     Ok(t) => t,
+    //     Err(e) => {
+    //         println!("{:?}", e);
+    //         return Err(e.into());
+    //     }
+    // };
+    // for (tensor_name, tensor_view) in tensors.tensors() {
+    //     println!(
+    //         "{} \t\t {:?} \t {:?}",
+    //         tensor_name,
+    //         tensor_view.shape(),
+    //         tensor_view.dtype()
+    //     );
+    // }
     Ok(())
 }
