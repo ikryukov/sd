@@ -1,17 +1,23 @@
-use std::fs::File;
-
 use anyhow::Result;
 use clap::Parser;
-use cudarc::cudnn::{ConvForward, TensorDescriptor};
+use cudarc::cudnn::{sys, ConvForward, FilterDescriptor, TensorDescriptor};
 use layers::{conv::Conv2d, layer::Layer};
 use memmap2::MmapOptions;
 use safetensors::SafeTensors;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::File;
+use std::time::{Duration, Instant};
+use tensor::{FilterTensor, Tensor};
+use resnet::ResnetBlock2D;
+
 use tracing::info;
 
 mod cmd;
 mod layers;
+mod tensor;
+mod resnet;
+mod Resnet;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelIndex {
@@ -56,70 +62,55 @@ fn main() -> Result<()> {
 
     let device = cudarc::driver::CudaDevice::new(0)?;
     let cudnn_handle = cudarc::cudnn::Cudnn::new(device.clone()).unwrap();
-    let desc = cudarc::cudnn::Cudnn::create_conv2d::<f32>(
-        &cudnn_handle,
-        [1, 1],
-        [1, 1],
-        [1, 1],
-        cudarc::cudnn::sys::cudnnConvolutionMode_t::CUDNN_CROSS_CORRELATION,
-    )
-    .unwrap();
-    let input = cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
-        &cudnn_handle,
-        cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-        [1, 1, 10, 10],
-    )
-    .unwrap();
-    let filter = cudarc::cudnn::Cudnn::create_4d_filter(
-        &cudnn_handle,
-        cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-        [1, 1, 3, 3],
-    )
-    .unwrap();
-    let output = cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
-        &cudnn_handle,
-        cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-        [1, 1, 10, 10],
-    )
-    .unwrap();
-    let conv = ConvForward {
-        conv: &desc,
-        x: &input,
-        w: &filter,
-        y: &output,
+
+    let x_tensor = Tensor {
+        desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
+            &cudnn_handle,
+            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+            [1, 1, 10, 10],
+        )
+        .unwrap(),
+        data: device.htod_copy(vec![1.0f32; 10 * 10]).unwrap(),
+    };
+    let filter_tensor = FilterTensor {
+        desc: cudarc::cudnn::Cudnn::create_4d_filter(
+            &cudnn_handle,
+            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+            [1, 1, 3, 3],
+        )
+        .unwrap(),
+        data: device.htod_copy(vec![1.0f32 / 9.0f32; 3 * 3]).unwrap(),
+    };
+    let mut y_tensor = Tensor {
+        desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
+            &cudnn_handle,
+            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+            [1, 1, 10, 10],
+        )
+        .unwrap(),
+        data: device.alloc_zeros::<f32>(10 * 10).unwrap(),
     };
 
-    let inp = device.htod_copy(vec![1.0f32; 10 * 10])?;
-    let mut out = device.alloc_zeros::<f32>(10 * 10)?;
-    let filter_d = device.htod_copy(vec![1.0f32 / 9.0f32; 3 * 3]).unwrap();
-
-    let mut out = device.alloc_zeros::<f32>(10 * 10)?;
-
-    let workspace_size = conv
-        .get_workspace_size(
-            cudarc::cudnn::sys::cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD,
-        )
-        .unwrap();
-    let mut workspace = device.alloc_zeros::<u8>(workspace_size).unwrap();
-    unsafe {
-        conv.launch(
-            cudarc::cudnn::sys::cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD,
-            Some(&mut workspace),
-            (1.0f32, 0.0f32),
-            &inp,
-            &filter_d,
-            &mut out,
-        )
-        .unwrap();
-    }
-
-    let host_out = device.dtoh_sync_copy(&out).unwrap();
-
-    info!("result: {:?}", host_out);
-
-    let test_conv = Conv2d::new(3, 3, 3, 3, 1, 1, 0);
+    let test_conv = Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1);
     info!("{:?}", test_conv);
-    test_conv.forward();
+
+    let workspace_size = test_conv.get_workspace_size(&x_tensor, &filter_tensor, &y_tensor);
+    let mut workspace = device.alloc_zeros::<u8>(workspace_size).unwrap();
+
+    test_conv.forward(
+        Some(&mut workspace),
+        &x_tensor,
+        &filter_tensor,
+        &mut y_tensor,
+    );
+
+    let host_out = device.dtoh_sync_copy(&y_tensor.data).unwrap();
+    info!("{:?}", host_out);
+
+    let resnet_block = ResnetBlock2D {
+        conv1: Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1),
+        conv2: Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1),
+    };
 
     // let contents = fs::read_to_string(args.model).expect("Couldn't find or load that file.");
 
