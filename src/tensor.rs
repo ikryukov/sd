@@ -4,6 +4,7 @@ use cudarc::driver::CudaSlice;
 
 #[derive(Debug)]
 pub struct Tensor {
+    // NCHW
     pub desc: TensorDescriptor<f32>,
     pub data: CudaSlice<f32>,
 }

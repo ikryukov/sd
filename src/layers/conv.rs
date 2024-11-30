@@ -5,7 +5,6 @@ use cudarc::cudnn::{sys, ConvDescriptor, ConvForward, Cudnn};
 use cudarc::driver::CudaSlice;
 use tracing::info;
 
-use super::layer::Layer;
 use crate::tensor::FilterTensor;
 use crate::tensor::Tensor;
 
