@@ -63,54 +63,50 @@ fn main() -> Result<()> {
     let device = cudarc::driver::CudaDevice::new(0)?;
     let cudnn_handle = cudarc::cudnn::Cudnn::new(device.clone()).unwrap();
 
-    let x_tensor = Tensor {
-        desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
-            &cudnn_handle,
-            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-            [1, 1, 10, 10],
-        )
-        .unwrap(),
-        data: device.htod_copy(vec![1.0f32; 10 * 10]).unwrap(),
-    };
-    let filter_tensor = FilterTensor {
-        desc: cudarc::cudnn::Cudnn::create_4d_filter(
-            &cudnn_handle,
-            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-            [1, 1, 3, 3],
-        )
-        .unwrap(),
-        data: device.htod_copy(vec![1.0f32 / 9.0f32; 3 * 3]).unwrap(),
-    };
-    let mut y_tensor = Tensor {
-        desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
-            &cudnn_handle,
-            cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-            [1, 1, 10, 10],
-        )
-        .unwrap(),
-        data: device.alloc_zeros::<f32>(10 * 10).unwrap(),
-    };
+    // let x_tensor = Tensor {
+    //     desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
+    //         &cudnn_handle,
+    //         cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+    //         [1, 1, 10, 10],
+    //     )
+    //     .unwrap(),
+    //     data: device.htod_copy(vec![1.0f32; 10 * 10]).unwrap(),
+    // };
+    // let filter_tensor = FilterTensor {
+    //     desc: cudarc::cudnn::Cudnn::create_4d_filter(
+    //         &cudnn_handle,
+    //         cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+    //         [1, 1, 3, 3],
+    //     )
+    //     .unwrap(),
+    //     data: device.htod_copy(vec![1.0f32 / 9.0f32; 3 * 3]).unwrap(),
+    // };
+    // let mut y_tensor = Tensor {
+    //     desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
+    //         &cudnn_handle,
+    //         cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
+    //         [1, 1, 10, 10],
+    //     )
+    //     .unwrap(),
+    //     data: device.alloc_zeros::<f32>(10 * 10).unwrap(),
+    // };
 
-    let test_conv = Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1);
-    info!("{:?}", test_conv);
+    // let test_conv = Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1);
+    // info!("{:?}", test_conv);
 
-    let workspace_size = test_conv.get_workspace_size(&x_tensor, &filter_tensor, &y_tensor);
-    let mut workspace = device.alloc_zeros::<u8>(workspace_size).unwrap();
+    // let workspace_size = test_conv.get_workspace_size(&x_tensor, &filter_tensor, &y_tensor);
+    // let mut workspace = device.alloc_zeros::<u8>(workspace_size).unwrap();
 
-    test_conv.forward(
-        Some(&mut workspace),
-        &x_tensor,
-        &filter_tensor,
-        &mut y_tensor,
-    );
+    // test_conv.forward(
+    //     Some(&mut workspace),
+    //     &x_tensor,
+    //     &filter_tensor,
+    //     &mut y_tensor,
+    // );
 
-    let host_out = device.dtoh_sync_copy(&y_tensor.data).unwrap();
-    info!("{:?}", host_out);
+    // let host_out = device.dtoh_sync_copy(&y_tensor.data).unwrap();
+    // info!("{:?}", host_out);
 
-    let resnet_block = ResnetBlock2D {
-        conv1: Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1),
-        conv2: Conv2d::new(cudnn_handle.clone(), 1, 1, 3, 3, 1, 1, 1),
-    };
 
     // let contents = fs::read_to_string(args.model).expect("Couldn't find or load that file.");
 
@@ -118,22 +114,23 @@ fn main() -> Result<()> {
 
     // println!("{:?}", model_index);
 
-    // let file = File::open(args.weights).unwrap();
-    // let buffer = unsafe { MmapOptions::new().map(&file).unwrap() };
-    // let tensors = match SafeTensors::deserialize(&buffer) {
-    //     Ok(t) => t,
-    //     Err(e) => {
-    //         println!("{:?}", e);
-    //         return Err(e.into());
-    //     }
-    // };
-    // for (tensor_name, tensor_view) in tensors.tensors() {
-    //     println!(
-    //         "{} \t\t {:?} \t {:?}",
-    //         tensor_name,
-    //         tensor_view.shape(),
-    //         tensor_view.dtype()
-    //     );
-    // }
+    let file = File::open(args.weights).unwrap();
+    let buffer = unsafe { MmapOptions::new().map(&file).unwrap() };
+    let tensors = match SafeTensors::deserialize(&buffer) {
+        Ok(t) => t,
+        Err(e) => {
+            println!("{:?}", e);
+            return Err(e.into());
+        }
+    };
+    println!("list tensors:");
+    for (tensor_name, tensor_view) in tensors.tensors() {
+        println!(
+            "{} \t\t {:?} \t {:?}",
+            tensor_name,
+            tensor_view.shape(),
+            tensor_view.dtype()
+        );
+    }
     Ok(())
 }

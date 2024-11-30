@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use cudarc::cudnn::{sys, ConvForward, FilterDescriptor, TensorDescriptor};
 use cudarc::driver::{CudaDevice, CudaSlice, LaunchAsync, LaunchConfig};
 use tracing::{error, info};
 
@@ -8,6 +7,7 @@ use crate::tensor::Tensor;
 
 use cuda_kernels::GROUPNORM;
 
+// https://pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html
 #[derive(Debug)]
 pub struct GroupNorm {
     device: Arc<CudaDevice>,
@@ -18,7 +18,7 @@ pub struct GroupNorm {
 }
 
 impl GroupNorm {
-    fn new(device: Arc<CudaDevice>, channels: usize, groups: usize) -> Self {
+    pub fn new(device: Arc<CudaDevice>, channels: usize, groups: usize) -> Self {
         assert!(
             channels % groups == 0,
             "Channels must be divisible by groups!"
@@ -36,7 +36,7 @@ impl GroupNorm {
         }
     }
 
-    fn forward(&self, input: &Tensor, output: &mut Tensor) {
+    pub fn forward(&self, input: &Tensor, output: &mut Tensor) {
         info!("group norm");
         let group_size = self.channels / self.groups;
         let eps: f32 = 1e-7f32;
@@ -98,7 +98,7 @@ fn test_group_norm() {
         desc: cudarc::cudnn::Cudnn::create_4d_tensor::<f32>(
             &cudnn_handle,
             cudarc::cudnn::sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW,
-            [1, (channels / groups) as i32, height as i32, width as i32],
+            [1, channels as i32, height as i32, width as i32],
         )
         .unwrap(),
         data: device
