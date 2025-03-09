@@ -1,0 +1,36 @@
+metal_convolution/basic/800x600
+                        time:   [12.566 ms 12.591 ms 12.632 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+metal_convolution/optimized/800x600
+                        time:   [11.298 ms 11.305 ms 11.312 ms]
+metal_convolution/mps/800x600
+                        time:   [1.0697 ms 1.0809 ms 1.1105 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+metal_convolution/basic/1024x768
+                        time:   [20.195 ms 20.204 ms 20.212 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+metal_convolution/optimized/1024x768
+                        time:   [18.197 ms 18.214 ms 18.237 ms]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high severe
+metal_convolution/mps/1024x768
+                        time:   [1.8149 ms 1.8175 ms 1.8194 ms]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low severe
+  1 (10.00%) high mild
+metal_convolution/basic/1920x1080
+                        time:   [54.498 ms 54.508 ms 54.520 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+metal_convolution/optimized/1920x1080
+                        time:   [47.451 ms 47.503 ms 47.556 ms]
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low mild
+  2 (20.00%) high mild
+metal_convolution/mps/1920x1080
+                        time:   [4.7837 ms 4.7906 ms 4.7970 ms]
+

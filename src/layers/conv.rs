@@ -17,7 +17,7 @@ pub struct Conv2d {
     stride: i32,
     padding: i32,
     dilation: i32,
-
+    algo: cudnnConvolutionFwdAlgo_t,
     desc: ConvDescriptor<f32>,
 }
 
@@ -32,6 +32,15 @@ impl Conv2d {
         padding: i32,
         dilation: i32,
     ) -> Self {
+        // Validate parameters
+        assert!(in_channels > 0, "in_channels must be positive");
+        assert!(out_channels > 0, "out_channels must be positive");
+        assert!(kernel_width > 0, "kernel_width must be positive");
+        assert!(kernel_height > 0, "kernel_height must be positive");
+        assert!(stride > 0, "stride must be positive");
+        assert!(padding >= 0, "padding must be non-negative");
+        assert!(dilation > 0, "dilation must be positive");
+
         let mut desc = cudarc::cudnn::Cudnn::create_conv2d::<f32>(
             &cudnn_handle,
             [padding, padding],
@@ -43,7 +52,7 @@ impl Conv2d {
         desc.set_math_type(sys::cudnnMathType_t::CUDNN_TENSOR_OP_MATH)
             .unwrap();
 
-        // Initialize `Conv2d` without the `ConvForward`.
+        // Default to WINOGRAD algorithm, but this can be changed
         Conv2d {
             in_channels,
             out_channels,
@@ -52,8 +61,13 @@ impl Conv2d {
             stride,
             padding,
             dilation,
+            algo: cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD,
             desc,
         }
+    }
+
+    pub fn set_algorithm(&mut self, algo: cudnnConvolutionFwdAlgo_t) {
+        self.algo = algo;
     }
 
     pub fn get_workspace_size(&self, input: &Tensor, filter: &FilterTensor, output: &Tensor) -> usize {
@@ -64,8 +78,13 @@ impl Conv2d {
             y: &output.desc,
         };
         let res = conv
-            .get_workspace_size(cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD)
-            .unwrap();
+            .get_workspace_size(self.algo)
+            .unwrap_or_else(|e| {
+                // Fall back to IMPLICIT_GEMM if the requested algorithm fails
+                info!("Algorithm failed with error: {:?}, falling back to IMPLICIT_GEMM", e);
+                conv.get_workspace_size(cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM)
+                    .unwrap_or(0)
+            });
         res
     }
 
@@ -74,7 +93,7 @@ impl Conv2d {
         workspace: Option<&mut CudaSlice<u8>>,
         input: &Tensor, filter: &FilterTensor, output: &mut Tensor
     ) {
-        info!("conv2d");
+        info!("conv2d forward with algorithm: {:?}", self.algo);
         let conv = ConvForward {
             conv: &self.desc,
             x: &input.desc,
@@ -82,16 +101,35 @@ impl Conv2d {
             y: &output.desc,
         };
 
-        unsafe {
+        // Try with the configured algorithm first
+        let result = unsafe {
             conv.launch(
-                cudarc::cudnn::sys::cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD,
+                self.algo,
                 workspace,
                 (1.0f32, 0.0f32),
                 &input.data,
                 &filter.data,
                 &mut output.data,
             )
-            .unwrap();
+        };
+
+        // If the algorithm fails and we have no workspace, try with IMPLICIT_GEMM which requires no workspace
+        if result.is_err() && workspace.is_none() {
+            info!("Algorithm failed, falling back to IMPLICIT_GEMM");
+            unsafe {
+                conv.launch(
+                    cudnnConvolutionFwdAlgo_t::CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+                    None,
+                    (1.0f32, 0.0f32),
+                    &input.data,
+                    &filter.data,
+                    &mut output.data,
+                )
+                .unwrap();
+            }
+        } else {
+            // Either the original call succeeded or we have a workspace but still failed
+            result.unwrap();
         }
     }
 }
